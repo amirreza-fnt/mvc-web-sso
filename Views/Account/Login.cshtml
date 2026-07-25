@@ -1,0 +1,28 @@
+@{
+    ViewData["Title"] = "ورود";
+}
+
+<div class="login-container">
+    <div class="login-card">
+        <h1 class="login-title">سامانه احراز هویت</h1>
+        <p class="login-subtitle">جهت ورود به سامانه از یکی از روش‌های زیر استفاده کنید</p>
+
+        @if (!string.IsNullOrEmpty(Context.Request.Query["error"]))
+        {
+            <div class="alert alert-error">
+                @Context.Request.Query["error"]
+            </div>
+        }
+
+        <div class="providers">
+            <a href="@Url.Action("redirect", "account", new { provider = "moi", returnUrl = ViewBag.ReturnUrl })"
+               class="btn btn-primary btn-block">
+                ورود با پنجره ملی خدمات وزارت کشور
+            </a>
+        </div>
+
+        <div class="login-footer">
+            <a href="@ViewBag.ReturnUrl" class="btn-link">بازگشت به سامانه</a>
+        </div>
+    </div>
+</div>
