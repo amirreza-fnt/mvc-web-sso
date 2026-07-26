@@ -126,15 +126,6 @@ public class AccountController : Controller
         HttpContext.Session.Remove("LoginState");
         HttpContext.Session.Remove("ReturnUrl");
 
-        // اگر returnUrl حاوی @token@ باشه، جایگزین کن (relay mode برای سرویس‌های خارجی)
-        if (returnUrl.Contains("@token@", StringComparison.OrdinalIgnoreCase))
-        {
-            returnUrl = returnUrl.Replace("@token@", Uri.EscapeDataString(tokenResult.AccessToken), StringComparison.OrdinalIgnoreCase)
-                               .Replace("@refresh@", Uri.EscapeDataString(tokenResult.RefreshToken ?? ""), StringComparison.OrdinalIgnoreCase);
-            _logger.LogInformation("Token relay mode: redirecting to {Url}", returnUrl);
-            return Redirect(returnUrl);
-        }
-
         return Redirect(returnUrl);
     }
 
