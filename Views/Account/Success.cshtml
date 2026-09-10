@@ -1,0 +1,19 @@
+@{
+    ViewData["Title"] = "ورود موفق";
+    Layout = "~/Views/Shared/_LoginShell.cshtml";
+    ViewData["Legal"] = "شما با ثبت‌نام در این سامانه با <a href=\"#\" style=\"font-weight:500;color:var(--terms);text-decoration:underline;text-decoration-style:dotted;text-underline-offset:4px\">قوانین و مقررات</a> موافقت کرده‌اید.";
+    var frontendUrl = ViewBag.FrontendUrl as string ?? "/";
+}
+
+<div class="success-panel">
+    <div class="success-lock">
+        <span class="success-ring"></span>
+        <span class="success-ring r2"></span>
+        <span class="success-ring r3"></span>
+        <img src="/images/lock.png" alt="" />
+    </div>
+
+    <p class="success-text">عملیات ورود با موفقیت انجام شد</p>
+
+    <a class="btn btn-primary" href="@frontendUrl">برو به صفحه اصلی</a>
+</div>

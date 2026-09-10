@@ -1,0 +1,61 @@
+@{
+    Layout = "_Layout";
+    var legal = ViewData["Legal"] as string;
+}
+
+<main class="login-page">
+    <div class="login-page-bg"></div>
+
+    <footer class="login-page-bottom">
+        <img src="/images/login-bottom.png" alt="" />
+        <div class="login-page-bottom-overlay"></div>
+    </footer>
+
+    <div class="login-page-center">
+        <div class="login-page-wrap">
+            <section class="login-card">
+                <div class="login-card-media">
+                    <img src="/images/login-right.png" alt="مسجد جامع سبزوار، خیابان بیهق" />
+                </div>
+
+                <div class="login-card-body">
+                    <img class="login-card-watermark" src="/images/shahrdari-typo.png" alt="شهرداری سبزوار" />
+
+                    <header class="login-card-header">
+                        <div class="login-card-brand">
+                            <img class="logo" src="/images/shahrdari-logo.png" alt="لوگوی شهرداری سبزوار" />
+                            <img class="wordmark" src="/images/shahrdari-word.png" alt="شهرداری سبزوار" />
+                        </div>
+                    </header>
+
+                    <div class="login-card-content">
+                        @RenderBody()
+
+                        <div class="login-card-footer">
+                            <p class="legal">
+                                @if (!string.IsNullOrEmpty(legal))
+                                {
+                                    @Html.Raw(legal)
+                                }
+                                else
+                                {
+                                    <text>لطفا ابتدا <a href="#">قوانین و مقررات</a> را مطالعه نمایید</text>
+                                }
+                            </p>
+                            <p class="version">نسخه: ۱.۰.۵</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <div class="login-page-credit">
+                <span>طراحی و توسعه در شرکت آرمان اسرار هوشمند</span>
+                <span>تابستان ۱۴۰۵ ©</span>
+            </div>
+        </div>
+    </div>
+</main>
+
+@section Scripts {
+    @await RenderSectionAsync("Scripts", required: false)
+}

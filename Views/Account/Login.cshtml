@@ -1,28 +1,48 @@
 @{
     ViewData["Title"] = "ورود";
+    Layout = "~/Views/Shared/_LoginShell.cshtml";
 }
 
-<div class="login-container">
-    <div class="login-card">
-        <h1 class="login-title">سامانه احراز هویت</h1>
-        <p class="login-subtitle">جهت ورود به سامانه از یکی از روش‌های زیر استفاده کنید</p>
+<h1 class="step-title">ورود کاربران به پورتال</h1>
+<p class="step-desc">شهروند گرامی، لطفا کد ملی خود را وارد نمایید:</p>
 
-        @if (!string.IsNullOrEmpty(Context.Request.Query["error"]))
-        {
-            <div class="alert alert-error">
-                @Context.Request.Query["error"]
-            </div>
-        }
-
-        <div class="providers">
-            <a href="@Url.Action("redirect", "account", new { provider = "moi", returnUrl = ViewBag.ReturnUrl })"
-               class="btn btn-primary btn-block">
-                ورود با پنجره ملی خدمات وزارت کشور
-            </a>
-        </div>
-
-        <div class="login-footer">
-            <a href="@ViewBag.ReturnUrl" class="btn-link">بازگشت به سامانه</a>
-        </div>
+@if (!string.IsNullOrEmpty(ViewBag.Error as string) || !string.IsNullOrEmpty(Context.Request.Query["error"]))
+{
+    <div class="alert alert-error">
+        @(ViewBag.Error as string ?? Context.Request.Query["error"].ToString())
     </div>
-</div>
+}
+
+<form method="post" asp-controller="Account" asp-action="login" novalidate>
+    <input type="hidden" name="returnUrl" value="@ViewBag.ReturnUrl" />
+
+    <label class="field">
+        <span class="sr-only">کد ملی</span>
+        <span class="field-icon">
+            <img src="/images/iran.png" alt="" />
+        </span>
+        <input
+            class="field-input"
+            type="text"
+            name="melliCode"
+            inputmode="numeric"
+            autocomplete="off"
+            maxlength="10"
+            placeholder="مثال: ۰۷۸۱۲۳۴۵۶۷"
+            value="@ViewBag.MelliCode"
+            required />
+    </label>
+
+    <button type="submit" class="btn btn-primary">ارسال کد تایید</button>
+</form>
+
+<div class="divider">یا</div>
+
+<a class="sso-btn"
+   href="@Url.Action("redirect", "Account", new { provider = "moi", returnUrl = ViewBag.ReturnUrl })">
+    <span class="sso-btn-label">
+        <img src="/images/ir.png" alt="" />
+        ورود از طریق پنجره دولت من
+    </span>
+    <span class="sso-btn-chevron">‹</span>
+</a>

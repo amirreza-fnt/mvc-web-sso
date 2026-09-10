@@ -7,9 +7,7 @@
     <link rel="stylesheet" href="/css/site.css" />
 </head>
 <body>
-    <main role="main">
-        @RenderBody()
-    </main>
+    @RenderBody()
     @await RenderSectionAsync("Scripts", required: false)
 </body>
 </html>

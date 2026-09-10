@@ -1,0 +1,56 @@
+@{
+    ViewData["Title"] = "کد تایید";
+    Layout = "~/Views/Shared/_LoginShell.cshtml";
+    var phoneLabel = ViewBag.PhoneLabel as string ?? ViewBag.PhoneNumber as string ?? "";
+}
+
+<p class="step-desc">
+    یک کد ۵ رقمی به شماره تلفن
+    <span class="phone-underline">@phoneLabel</span>
+    ارسال شد، لطفا آن را در فیلد زیر وارد نمایید:
+</p>
+
+@if (!string.IsNullOrEmpty(ViewBag.Error as string))
+{
+    <div class="alert alert-error">@ViewBag.Error</div>
+}
+
+<form method="post" asp-controller="Account" asp-action="Otp" id="otp-form" novalidate>
+    <input type="hidden" name="otpCode" id="otpCode" value="" />
+
+    <div class="otp-row" id="otp-row" dir="ltr">
+        @for (var i = 0; i < 5; i++)
+        {
+            <input class="otp-input @(i == 0 ? "is-active" : "")"
+                   type="text"
+                   inputmode="numeric"
+                   autocomplete="@(i == 0 ? "one-time-code" : "off")"
+                   maxlength="1"
+                   placeholder="—"
+                   data-otp-index="@i" />
+        }
+    </div>
+
+    <button type="submit" class="btn btn-primary" id="otp-submit">تایید</button>
+</form>
+
+<div class="otp-meta">
+    <div id="otp-timer-wrap">
+        <p id="otp-timer-text">
+            ارسال مجدد کد تایید تا
+            <span class="phone-underline" id="otp-timer">۰۱:۵۹</span>
+            ثانیه دیگر
+        </p>
+        <form method="post" asp-controller="Account" asp-action="ResendOtp" id="resend-form" style="display:none">
+            <button type="submit" class="otp-resend">ارسال مجدد کد تایید</button>
+        </form>
+    </div>
+    <a class="otp-edit" href="@Url.Action("SelectPhone", "Account")">
+        ویرایش شماره تلفن
+        <span>‹</span>
+    </a>
+</div>
+
+@section Scripts {
+<script src="/js/otp.js"></script>
+}

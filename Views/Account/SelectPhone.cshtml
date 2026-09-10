@@ -1,0 +1,62 @@
+@model List<SSOLoginService.Web.Services.PhoneOption>
+@{
+    ViewData["Title"] = "انتخاب شماره تلفن";
+    Layout = "~/Views/Shared/_LoginShell.cshtml";
+    var phones = Model ?? new List<SSOLoginService.Web.Services.PhoneOption>();
+    var selected = ViewBag.SelectedPhone as string ?? phones.FirstOrDefault()?.Value;
+}
+
+<h1 class="step-title center">انتخاب شماره تلفن همراه</h1>
+<p class="step-desc">
+    برای این کد ملی @(phones.Count > 1 ? "چند" : "یک") شماره تلفن همراه ثبت شده است، لطفا یک شماره تلفن را
+    انتخاب نمایید:
+</p>
+
+@if (!string.IsNullOrEmpty(ViewBag.Error as string))
+{
+    <div class="alert alert-error">@ViewBag.Error</div>
+}
+
+<form method="post" asp-controller="Account" asp-action="SelectPhone" id="select-phone-form">
+    <div class="phone-list" id="phone-list">
+        @for (var i = 0; i < phones.Count; i++)
+        {
+            var phone = phones[i];
+            var isSelected = string.Equals(phone.Value, selected, StringComparison.Ordinal);
+            <label class="phone-option @(isSelected ? "is-selected" : "")">
+                <input type="radio"
+                       name="phoneNumber"
+                       value="@phone.Value"
+                       @(isSelected ? "checked" : null)
+                       class="sr-only phone-radio" />
+                <span>@(string.IsNullOrWhiteSpace(phone.Label) ? phone.Value : phone.Label)</span>
+                <span class="phone-check" aria-hidden="true">
+                    <svg viewBox="0 0 16 16" fill="none">
+                        <path d="M3.5 8.2 L6.4 11.1 L12.5 4.8"
+                              stroke="currentColor"
+                              stroke-width="1.8"
+                              stroke-linecap="round"
+                              stroke-linejoin="round" />
+                    </svg>
+                </span>
+            </label>
+        }
+    </div>
+
+    <button type="submit" class="btn btn-primary">تایید شماره تلفن همراه</button>
+</form>
+
+@section Scripts {
+<script>
+(function () {
+    var list = document.getElementById("phone-list");
+    if (!list) return;
+    list.addEventListener("change", function (e) {
+        if (!e.target.classList.contains("phone-radio")) return;
+        list.querySelectorAll(".phone-option").forEach(function (el) {
+            el.classList.toggle("is-selected", el.querySelector(".phone-radio") === e.target);
+        });
+    });
+})();
+</script>
+}
