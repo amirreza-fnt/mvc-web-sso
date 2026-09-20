@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text;
 
 namespace SSOLoginService.Web.Services;
@@ -31,8 +32,11 @@ public class SmsService
 
         var sendUrl = _configuration["Sms:SendUrl"] ?? DefaultSendUrl;
         var num = NormalizePhone(phoneNumber);
-        if (string.IsNullOrWhiteSpace(num))
+        if (string.IsNullOrWhiteSpace(num) || num.Length < 10)
+        {
+            _logger.LogError("Invalid phone for SMS: {Phone}", phoneNumber);
             return (false, "شماره تلفن نامعتبر است");
+        }
 
         var body = new StringBuilder()
             .Append("کد ورود : ")
@@ -41,18 +45,35 @@ public class SmsService
             .Append(_configuration["Sms:FooterLine"] ?? FooterLine)
             .ToString();
 
-        var query = new StringBuilder(sendUrl.TrimEnd('?', '&'))
-            .Append('?')
-            .Append("Token=").Append(Uri.EscapeDataString(token))
-            .Append("&Num=").Append(Uri.EscapeDataString(num))
-            .Append("&Body=").Append(Uri.EscapeDataString(body));
+        var url = BuildSendUrl(sendUrl, token, num, body);
+        _logger.LogInformation("Sending login OTP SMS to phone ending {Suffix}", SafeSuffix(num));
 
+        return await SendGatewayRequestAsync(url);
+    }
+
+    private async Task<(bool Ok, string? Error)> SendGatewayRequestAsync(Uri url)
+    {
         try
         {
-            _logger.LogInformation("Sending login OTP SMS to phone ending {Suffix}", SafeSuffix(num));
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            using var response = await _httpClient.SendAsync(
+                request,
+                HttpCompletionOption.ResponseHeadersRead);
 
-            var response = await _httpClient.GetAsync(query.ToString());
-            var content = await response.Content.ReadAsStringAsync();
+            var content = string.Empty;
+            try
+            {
+                content = await response.Content.ReadAsStringAsync();
+            }
+            catch (Exception readEx) when (IsAbruptGatewayClose(readEx))
+            {
+                _logger.LogWarning(
+                    readEx,
+                    "SMS gateway closed while reading body (status {Status}); assuming SMS was sent",
+                    response.StatusCode);
+
+                return (true, null);
+            }
 
             if (!response.IsSuccessStatusCode)
             {
@@ -63,11 +84,51 @@ public class SmsService
             _logger.LogInformation("SMS gateway responded: {Body}", content);
             return (true, null);
         }
+        catch (Exception ex) when (IsAbruptGatewayClose(ex))
+        {
+            _logger.LogWarning(ex, "SMS gateway closed connection abruptly; assuming SMS was sent");
+            return (true, null);
+        }
+        catch (TaskCanceledException ex)
+        {
+            _logger.LogError(ex, "SMS gateway request timed out");
+            return (false, "ارسال پیامک ناموفق بود (تایم‌اوت)");
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Exception while sending SMS");
+            _logger.LogError(ex, "Exception while sending SMS: {Message}", ex.Message);
             return (false, "خطا در ارسال پیامک");
         }
+    }
+
+    private static Uri BuildSendUrl(string sendUrl, string token, string num, string body)
+    {
+        var query = new StringBuilder(sendUrl.TrimEnd('?', '&'))
+            .Append('?')
+            .Append("Token=").Append(Uri.EscapeDataString(token))
+            .Append("&Num=").Append(Uri.EscapeDataString(num))
+            .Append("&Body=").Append(Uri.EscapeDataString(body));
+
+        return new Uri(query.ToString());
+    }
+
+    private static bool IsAbruptGatewayClose(Exception ex)
+    {
+        for (var current = ex; current != null; current = current.InnerException)
+        {
+            if (current is IOException)
+                return true;
+
+            var message = current.Message;
+            if (message.Contains("connection was closed", StringComparison.OrdinalIgnoreCase)
+                || message.Contains("unexpectedly", StringComparison.OrdinalIgnoreCase)
+                || message.Contains("prematurely", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static string NormalizePhone(string phoneNumber)

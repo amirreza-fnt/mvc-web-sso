@@ -1,3 +1,4 @@
+using System.Net;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using SSOLoginService.Web.Services;
 
@@ -14,6 +15,17 @@ builder.Services.AddHttpClient<AuthApiClient>(client =>
 builder.Services.AddHttpClient<SmsService>(client =>
 {
     client.Timeout = TimeSpan.FromSeconds(30);
+    client.DefaultRequestVersion = HttpVersion.Version11;
+    client.DefaultVersionPolicy = HttpVersionPolicy.RequestVersionOrLower;
+    client.DefaultRequestHeaders.UserAgent.ParseAdd(
+        "Mozilla/5.0 (compatible; ShahrdariCentralWeb/1.0)");
+    client.DefaultRequestHeaders.Accept.ParseAdd("text/html,application/xhtml+xml,*/*");
+})
+.ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+{
+    AllowAutoRedirect = true,
+    AutomaticDecompression = DecompressionMethods.All,
+    ConnectTimeout = TimeSpan.FromSeconds(15)
 });
 
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
