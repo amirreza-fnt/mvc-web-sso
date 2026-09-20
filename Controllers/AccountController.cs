@@ -17,11 +17,16 @@ public class AccountController : Controller
     private const string SessionReturnUrl = "ReturnUrl";
 
     private readonly AuthApiClient _authApiClient;
+    private readonly SmsService _smsService;
     private readonly ILogger<AccountController> _logger;
 
-    public AccountController(AuthApiClient authApiClient, ILogger<AccountController> logger)
+    public AccountController(
+        AuthApiClient authApiClient,
+        SmsService smsService,
+        ILogger<AccountController> logger)
     {
         _authApiClient = authApiClient;
+        _smsService = smsService;
         _logger = logger;
     }
 
@@ -107,7 +112,7 @@ public class AccountController : Controller
             return View(phones);
         }
 
-        var (ok, error) = await _authApiClient.SendOtpAsync(selected.Value, melliCode);
+        var (ok, error) = await RequestOtpAndSendSmsAsync(selected.Value, melliCode);
         if (!ok)
         {
             ViewBag.Error = error ?? "ارسال کد تایید ناموفق بود";
@@ -168,10 +173,11 @@ public class AccountController : Controller
             return View();
         }
 
+        var returnUrl = HttpContext.Session.GetString(SessionReturnUrl) ?? FrontendUrl;
         await SignInWithTokensAsync(token);
-        ClearLoginSession(keepReturnUrl: true);
+        ClearLoginSession(keepReturnUrl: false);
 
-        return RedirectToAction(nameof(Success));
+        return CompleteLoginRedirect(returnUrl, token);
     }
 
     [HttpPost]
@@ -183,7 +189,7 @@ public class AccountController : Controller
         if (string.IsNullOrEmpty(melliCode) || string.IsNullOrEmpty(phoneNumber))
             return RedirectToAction("login");
 
-        var (ok, error) = await _authApiClient.SendOtpAsync(phoneNumber, melliCode);
+        var (ok, error) = await RequestOtpAndSendSmsAsync(phoneNumber, melliCode);
         if (!ok)
         {
             ViewBag.Error = error ?? "ارسال مجدد کد تایید ناموفق بود";
@@ -272,7 +278,7 @@ public class AccountController : Controller
         var returnUrl = HttpContext.Session.GetString(SessionReturnUrl) ?? FrontendUrl;
         ClearLoginSession(keepReturnUrl: false);
 
-        return Redirect(returnUrl);
+        return CompleteLoginRedirect(returnUrl, tokenResult);
     }
 
     [HttpPost]
@@ -333,6 +339,26 @@ public class AccountController : Controller
         _logger.LogInformation("User authenticated successfully");
     }
 
+    private async Task<(bool Ok, string? Error)> RequestOtpAndSendSmsAsync(string phoneNumber, string melliCode)
+    {
+        var (ok, otpCode, error) = await _authApiClient.SendOtpAsync(phoneNumber, melliCode);
+        if (!ok)
+            return (false, error);
+
+        if (string.IsNullOrWhiteSpace(otpCode))
+        {
+            _logger.LogError("OTP code missing after send-otp for phone ending {Suffix}",
+                phoneNumber.Length <= 4 ? "****" : phoneNumber[^4..]);
+            return (false, "کد تایید دریافت نشد");
+        }
+
+        var (smsOk, smsError) = await _smsService.SendLoginOtpAsync(phoneNumber, otpCode);
+        if (!smsOk)
+            return (false, smsError);
+
+        return (true, null);
+    }
+
     private void SavePhones(List<PhoneOption> phones)
     {
         var json = JsonSerializer.Serialize(phones);
@@ -370,6 +396,36 @@ public class AccountController : Controller
     {
         return Redirect(FrontendUrl);
     }
+
+    private IActionResult CompleteLoginRedirect(string returnUrl, TokenResponse token)
+    {
+        if (IsCustomSchemeReturnUrl(returnUrl))
+        {
+            var separator = returnUrl.Contains('?', StringComparison.Ordinal) ? '&' : '?';
+            var redirect = $"{returnUrl}{separator}token={Uri.EscapeDataString(token.AccessToken)}";
+            if (!string.IsNullOrWhiteSpace(token.RefreshToken))
+            {
+                redirect += $"&refreshToken={Uri.EscapeDataString(token.RefreshToken)}";
+            }
+
+            return Redirect(redirect);
+        }
+
+        if (returnUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+            || returnUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            return Redirect(returnUrl);
+        }
+
+        HttpContext.Session.SetString(SessionReturnUrl, returnUrl);
+        return RedirectToAction(nameof(Success));
+    }
+
+    private static bool IsCustomSchemeReturnUrl(string? returnUrl) =>
+        !string.IsNullOrWhiteSpace(returnUrl)
+        && returnUrl.Contains("://", StringComparison.Ordinal)
+        && !returnUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+        && !returnUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
 
     private string FrontendUrl =>
         HttpContext.RequestServices

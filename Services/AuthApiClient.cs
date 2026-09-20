@@ -231,34 +231,37 @@ public class AuthApiClient
         }
     }
 
-    public async Task<(bool Ok, string? Error)> SendOtpAsync(string phoneNumber, string melliCode)
+    public async Task<(bool Ok, string? OtpCode, string? Error)> SendOtpAsync(string phoneNumber, string melliCode)
     {
         try
         {
+            var otpCode = Random.Shared.Next(0, 100_000).ToString("D5");
             var request = new SendOtpRequest
             {
                 PhoneNumber = phoneNumber,
                 MelliCode = melliCode,
-                OtpCode = string.Empty
+                OtpCode = otpCode
             };
 
             _logger.LogInformation("Sending OTP for phone ending {Suffix}", SafeSuffix(phoneNumber));
 
             var response = await _httpClient.PostAsJsonAsync("/api/auth/second-login/send-otp", request);
-            var result = await ReadApiResultAsync<object>(response);
+            var raw = await response.Content.ReadAsStringAsync();
+            var result = TryDeserialize<ApiResult<JsonElement>>(raw);
 
             if (!response.IsSuccessStatusCode || (result != null && result.Success == false))
             {
                 _logger.LogError("Send OTP failed: {Status} - {Message}", response.StatusCode, result?.Message);
-                return (false, result?.Message ?? "ارسال کد تایید ناموفق بود");
+                return (false, null, result?.Message ?? "ارسال کد تایید ناموفق بود");
             }
 
-            return (true, null);
+            var resolvedOtp = TryExtractOtpCode(raw) ?? otpCode;
+            return (true, resolvedOtp, null);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Exception in send-otp");
-            return (false, "خطا در ارتباط با سرویس احراز هویت");
+            return (false, null, "خطا در ارتباط با سرویس احراز هویت");
         }
     }
 
@@ -476,4 +479,55 @@ public class AuthApiClient
 
     private static string SafeSuffix(string value) =>
         value.Length <= 4 ? "****" : value[^4..];
+
+    private static string? TryExtractOtpCode(string raw)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(raw);
+            var root = doc.RootElement;
+
+            if (TryExtractOtpFromObject(root, out var fromRoot))
+                return fromRoot;
+
+            if (root.TryGetProperty("data", out var data) && TryExtractOtpFromObject(data, out var fromData))
+                return fromData;
+        }
+        catch
+        {
+            // ignore parse errors
+        }
+
+        return null;
+    }
+
+    private static bool TryExtractOtpFromObject(JsonElement element, out string? otpCode)
+    {
+        otpCode = null;
+        if (element.ValueKind != JsonValueKind.Object)
+            return false;
+
+        foreach (var name in new[] { "otpCode", "OtpCode", "code", "verificationCode", "otp" })
+        {
+            if (!element.TryGetProperty(name, out var prop))
+                continue;
+
+            var value = prop.ValueKind == JsonValueKind.Number
+                ? prop.GetInt32().ToString("D5")
+                : prop.GetString();
+
+            if (!IsValidOtp(value))
+                continue;
+
+            otpCode = value;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool IsValidOtp(string? value) =>
+        !string.IsNullOrWhiteSpace(value)
+        && value.Length == 5
+        && value.All(char.IsDigit);
 }

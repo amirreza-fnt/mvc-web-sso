@@ -1,0 +1,2 @@
+sudo systemctl restart shahrdari-central-web
+sudo systemctl status shahrdari-central-web
