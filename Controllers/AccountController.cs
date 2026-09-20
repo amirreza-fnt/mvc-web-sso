@@ -101,27 +101,26 @@ public class AccountController : Controller
         if (string.IsNullOrEmpty(melliCode) || phones.Count == 0)
             return RedirectToAction("login");
 
-        var selected = phones.FirstOrDefault(p =>
-            string.Equals(p.Value, phoneNumber, StringComparison.Ordinal)
-            || string.Equals(p.Label, phoneNumber, StringComparison.Ordinal));
+        var selected = TryResolveSelectedPhone(phones, phoneNumber);
 
         if (selected == null || string.IsNullOrWhiteSpace(selected.Value))
         {
             ViewBag.Error = "لطفا یک شماره تلفن معتبر انتخاب کنید";
-            ViewBag.SelectedPhone = phoneNumber;
+            ViewBag.SelectedIndex = 0;
             return View(phones);
         }
 
+        var selectedIndex = phones.IndexOf(selected);
         var (ok, error) = await RequestOtpAndSendSmsAsync(selected.Value, melliCode);
         if (!ok)
         {
             ViewBag.Error = error ?? "ارسال کد تایید ناموفق بود";
-            ViewBag.SelectedPhone = selected.Value;
+            ViewBag.SelectedIndex = selectedIndex >= 0 ? selectedIndex : 0;
             return View(phones);
         }
 
         HttpContext.Session.SetString(SessionPhoneNumber, selected.Value);
-        HttpContext.Session.SetString(SessionPhoneLabel, selected.Label);
+        HttpContext.Session.SetString(SessionPhoneLabel, PhoneMasking.FormatForDisplay(selected.Value));
 
         return RedirectToAction(nameof(Otp));
     }
@@ -137,8 +136,8 @@ public class AccountController : Controller
         if (string.IsNullOrEmpty(melliCode) || string.IsNullOrEmpty(phoneNumber))
             return RedirectToAction("login");
 
-        ViewBag.PhoneNumber = phoneNumber;
-        ViewBag.PhoneLabel = HttpContext.Session.GetString(SessionPhoneLabel) ?? phoneNumber;
+        ViewBag.PhoneLabel = HttpContext.Session.GetString(SessionPhoneLabel)
+            ?? PhoneMasking.FormatForDisplay(phoneNumber);
         return View();
     }
 
@@ -151,9 +150,9 @@ public class AccountController : Controller
 
         var melliCode = HttpContext.Session.GetString(SessionMelliCode);
         var phoneNumber = HttpContext.Session.GetString(SessionPhoneNumber);
-        var phoneLabel = HttpContext.Session.GetString(SessionPhoneLabel) ?? phoneNumber;
+        var phoneLabel = HttpContext.Session.GetString(SessionPhoneLabel)
+            ?? PhoneMasking.FormatForDisplay(phoneNumber);
 
-        ViewBag.PhoneNumber = phoneNumber;
         ViewBag.PhoneLabel = phoneLabel;
 
         if (string.IsNullOrEmpty(melliCode) || string.IsNullOrEmpty(phoneNumber))
@@ -193,8 +192,8 @@ public class AccountController : Controller
         if (!ok)
         {
             ViewBag.Error = error ?? "ارسال مجدد کد تایید ناموفق بود";
-            ViewBag.PhoneNumber = phoneNumber;
-            ViewBag.PhoneLabel = HttpContext.Session.GetString(SessionPhoneLabel) ?? phoneNumber;
+            ViewBag.PhoneLabel = HttpContext.Session.GetString(SessionPhoneLabel)
+                ?? PhoneMasking.FormatForDisplay(phoneNumber);
             return View("Otp");
         }
 
@@ -352,11 +351,41 @@ public class AccountController : Controller
             return (false, "کد تایید دریافت نشد");
         }
 
+        var configuration = HttpContext.RequestServices.GetRequiredService<IConfiguration>();
+        var sendFromWeb = configuration.GetValue("Sms:SendFromWeb", true);
+        if (!sendFromWeb)
+        {
+            _logger.LogInformation("Sms:SendFromWeb is false; skipping direct ERP SMS call");
+            return (true, null);
+        }
+
         var (smsOk, smsError) = await _smsService.SendLoginOtpAsync(phoneNumber, otpCode);
         if (!smsOk)
             return (false, smsError);
 
         return (true, null);
+    }
+
+    private static PhoneOption? TryResolveSelectedPhone(List<PhoneOption> phones, string? selection)
+    {
+        if (string.IsNullOrWhiteSpace(selection) || phones.Count == 0)
+            return null;
+
+        if (int.TryParse(
+                PhoneMasking.NormalizeDigits(selection),
+                System.Globalization.NumberStyles.None,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out var index)
+            && index >= 0
+            && index < phones.Count)
+        {
+            return phones[index];
+        }
+
+        var normalizedSelection = PhoneMasking.NormalizeDigits(selection);
+        return phones.FirstOrDefault(p =>
+            string.Equals(p.Value, selection, StringComparison.Ordinal)
+            || string.Equals(PhoneMasking.NormalizeDigits(p.Value), normalizedSelection, StringComparison.Ordinal));
     }
 
     private void SavePhones(List<PhoneOption> phones)

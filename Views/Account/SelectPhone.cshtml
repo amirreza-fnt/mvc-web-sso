@@ -3,7 +3,9 @@
     ViewData["Title"] = "انتخاب شماره تلفن";
     Layout = "~/Views/Shared/_LoginShell.cshtml";
     var phones = Model ?? new List<SSOLoginService.Web.Services.PhoneOption>();
-    var selected = ViewBag.SelectedPhone as string ?? phones.FirstOrDefault()?.Value;
+    var selectedIndex = ViewBag.SelectedIndex as int? ?? 0;
+    if (selectedIndex < 0 || selectedIndex >= phones.Count)
+        selectedIndex = 0;
 }
 
 <h1 class="step-title center">انتخاب شماره تلفن همراه</h1>
@@ -22,14 +24,14 @@
         @for (var i = 0; i < phones.Count; i++)
         {
             var phone = phones[i];
-            var isSelected = string.Equals(phone.Value, selected, StringComparison.Ordinal);
+            var isSelected = i == selectedIndex;
             <label class="phone-option @(isSelected ? "is-selected" : "")">
                 <input type="radio"
                        name="phoneNumber"
-                       value="@phone.Value"
+                       value="@i"
                        @(isSelected ? "checked" : null)
                        class="sr-only phone-radio" />
-                <span>@(string.IsNullOrWhiteSpace(phone.Label) ? phone.Value : phone.Label)</span>
+                <span>@PhoneMasking.FormatForDisplay(phone.Value)</span>
                 <span class="phone-check" aria-hidden="true">
                     <svg viewBox="0 0 16 16" fill="none">
                         <path d="M3.5 8.2 L6.4 11.1 L12.5 4.8"

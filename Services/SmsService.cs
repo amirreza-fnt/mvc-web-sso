@@ -38,12 +38,8 @@ public class SmsService
             return (false, "شماره تلفن نامعتبر است");
         }
 
-        var body = new StringBuilder()
-            .Append("کد ورود : ")
-            .Append(otpCode)
-            .Append('\n')
-            .Append(_configuration["Sms:FooterLine"] ?? FooterLine)
-            .ToString();
+        var footer = _configuration["Sms:FooterLine"] ?? FooterLine;
+        var body = AuthApiClient.BuildLoginSmsBody(otpCode, footer);
 
         var url = BuildSendUrl(sendUrl, token, num, body);
         _logger.LogInformation("Sending login OTP SMS to phone ending {Suffix}", SafeSuffix(num));
@@ -91,8 +87,8 @@ public class SmsService
         }
         catch (TaskCanceledException ex)
         {
-            _logger.LogError(ex, "SMS gateway request timed out");
-            return (false, "ارسال پیامک ناموفق بود (تایم‌اوت)");
+            _logger.LogError(ex, "SMS gateway request timed out (server may not reach erp.sabzevar.ir:80)");
+            return (false, "ارسال پیامک ناموفق بود: سرور به erp.sabzevar.ir دسترسی شبکه ندارد");
         }
         catch (Exception ex)
         {

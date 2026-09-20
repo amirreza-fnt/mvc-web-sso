@@ -109,6 +109,9 @@ public class SendOtpRequest
 
     [JsonPropertyName("otpCode")]
     public string OtpCode { get; set; } = string.Empty;
+
+    [JsonPropertyName("smsBody")]
+    public string? SmsBody { get; set; }
 }
 
 public class VerifyOtpRequest
@@ -240,7 +243,8 @@ public class AuthApiClient
             {
                 PhoneNumber = phoneNumber,
                 MelliCode = melliCode,
-                OtpCode = otpCode
+                OtpCode = otpCode,
+                SmsBody = BuildLoginSmsBody(otpCode)
             };
 
             _logger.LogInformation("Sending OTP for phone ending {Suffix}", SafeSuffix(phoneNumber));
@@ -479,6 +483,9 @@ public class AuthApiClient
 
     private static string SafeSuffix(string value) =>
         value.Length <= 4 ? "****" : value[^4..];
+
+    public static string BuildLoginSmsBody(string otpCode, string? footerLine = null) =>
+        $"کد ورود : {otpCode}\n{footerLine ?? "مدیریت فناوری اطلاعات شهرداری سبزوار"}";
 
     private static string? TryExtractOtpCode(string raw)
     {
