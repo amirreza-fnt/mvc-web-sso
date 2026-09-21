@@ -10,6 +10,7 @@ namespace SSOLoginService.Web.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/auth")]
+[EnableCors("CitizenApps")]
 public class AuthApiController : ControllerBase
 {
     private readonly OtpDeliveryService _otpDelivery;
@@ -20,7 +21,6 @@ public class AuthApiController : ControllerBase
     }
 
     [HttpPost("second-login/send-otp")]
-    [EnableCors("CitizenApps")]
     public async Task<ActionResult<ApiResult<object>>> SendOtp([FromBody] CitizenSendOtpRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.PhoneNumber) || string.IsNullOrWhiteSpace(request.MelliCode))
