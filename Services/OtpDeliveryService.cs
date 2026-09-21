@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Microsoft.Extensions.Caching.Memory;
 
 namespace SSOLoginService.Web.Services;
@@ -5,6 +6,8 @@ namespace SSOLoginService.Web.Services;
 public class OtpDeliveryService
 {
     private const int DefaultResendCooldownSeconds = 120;
+
+    private static readonly ConcurrentDictionary<string, SemaphoreSlim> SendLocks = new(StringComparer.Ordinal);
 
     private readonly AuthApiClient _authApiClient;
     private readonly SmsService _smsService;
@@ -29,38 +32,65 @@ public class OtpDeliveryService
     public async Task<(bool Ok, string? Error)> SendOtpWithSmsAsync(string phoneNumber, string melliCode)
     {
         var cacheKey = BuildResendCacheKey(phoneNumber, melliCode);
-        if (_cache.TryGetValue(cacheKey, out _))
-            return (false, "حداکثر یک بار در هر ۲ دقیقه می‌توانید کد دریافت کنید");
+        var gate = SendLocks.GetOrAdd(cacheKey, _ => new SemaphoreSlim(1, 1));
 
-        var (ok, otpCode, error) = await _authApiClient.SendOtpAsync(phoneNumber, melliCode);
-        if (!ok)
-            return (false, error);
-
-        if (string.IsNullOrWhiteSpace(otpCode))
+        if (!await gate.WaitAsync(TimeSpan.Zero))
         {
-            _logger.LogError(
-                "OTP code missing after send-otp for phone ending {Suffix}",
+            _logger.LogWarning(
+                "Concurrent OTP send rejected for phone ending {Suffix}",
                 SafeSuffix(phoneNumber));
-            return (false, "کد تایید دریافت نشد");
+            return (false, "درخواست قبلی هنوز در حال پردازش است. چند لحظه صبر کنید.");
         }
 
-        var sendFromWeb = _configuration.GetValue("Sms:SendFromWeb", true);
-        if (!sendFromWeb)
+        try
         {
-            _logger.LogInformation("Sms:SendFromWeb is false; OTP registered without ERP SMS");
+            if (_cache.TryGetValue(cacheKey, out _))
+                return (false, "حداکثر یک بار در هر ۲ دقیقه می‌توانید کد دریافت کنید");
+
+            var cooldownSeconds = _configuration.GetValue(
+                "Otp:ResendCooldownSeconds",
+                DefaultResendCooldownSeconds);
+
+            _cache.Set(cacheKey, true, TimeSpan.FromSeconds(cooldownSeconds));
+
+            var (ok, otpCode, error) = await _authApiClient.SendOtpAsync(phoneNumber, melliCode);
+            if (!ok)
+            {
+                _cache.Remove(cacheKey);
+                return (false, error);
+            }
+
+            if (string.IsNullOrWhiteSpace(otpCode))
+            {
+                _logger.LogError(
+                    "OTP code missing after send-otp for phone ending {Suffix}",
+                    SafeSuffix(phoneNumber));
+                _cache.Remove(cacheKey);
+                return (false, "کد تایید دریافت نشد");
+            }
+
+            var sendFromWeb = _configuration.GetValue("Sms:SendFromWeb", true);
+            if (!sendFromWeb)
+            {
+                _logger.LogInformation("Sms:SendFromWeb is false; OTP registered without ERP SMS");
+                return (true, null);
+            }
+
+            var (smsOk, smsError) = await _smsService.SendLoginOtpAsync(phoneNumber, otpCode);
+            if (!smsOk)
+            {
+                _logger.LogWarning(
+                    "ERP SMS failed for phone ending {Suffix}; cooldown kept",
+                    SafeSuffix(phoneNumber));
+                return (false, smsError);
+            }
+
             return (true, null);
         }
-
-        var (smsOk, smsError) = await _smsService.SendLoginOtpAsync(phoneNumber, otpCode);
-        if (!smsOk)
-            return (false, smsError);
-
-        var cooldownSeconds = _configuration.GetValue(
-            "Otp:ResendCooldownSeconds",
-            DefaultResendCooldownSeconds);
-        _cache.Set(cacheKey, true, TimeSpan.FromSeconds(cooldownSeconds));
-
-        return (true, null);
+        finally
+        {
+            gate.Release();
+        }
     }
 
     private static string BuildResendCacheKey(string phoneNumber, string melliCode) =>

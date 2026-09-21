@@ -20,9 +20,21 @@ builder.Services.AddCors(options =>
     });
 });
 
+var loginApiBaseUrl = builder.Configuration["Api:BaseUrl"] ?? "http://localhost:5001";
+if (Uri.TryCreate(loginApiBaseUrl, UriKind.Absolute, out var loginApiUri))
+{
+    var host = loginApiUri.Host;
+    if (host.Equals("auth.sabzevar.ir", StringComparison.OrdinalIgnoreCase)
+        || loginApiUri.Port == 5002)
+    {
+        throw new InvalidOperationException(
+            "Api:BaseUrl must point to apiweb-loginsso (login API), not the SSO portal — otherwise OTP send loops and spams SMS.");
+    }
+}
+
 builder.Services.AddHttpClient<AuthApiClient>(client =>
 {
-    client.BaseAddress = new Uri(builder.Configuration["Api:BaseUrl"] ?? "http://localhost:5001");
+    client.BaseAddress = new Uri(loginApiBaseUrl);
     client.Timeout = TimeSpan.FromSeconds(30);
 });
 
