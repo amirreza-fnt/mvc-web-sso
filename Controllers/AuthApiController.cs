@@ -6,21 +6,24 @@ using SSOLoginService.Web.Services;
 namespace SSOLoginService.Web.Controllers;
 
 /// <summary>
-/// JSON API for citizen apps (137 web/mobile). OTP SMS is sent server-side like the login portal.
+/// Citizen apps (137). OTP SMS like the login portal. Routes must differ from
+/// <see cref="AuthApiClient"/> login API paths to avoid self-call SMS loops.
 /// </summary>
 [ApiController]
-[Route("api/auth")]
+[Route("api/citizen")]
 [EnableCors("CitizenApps")]
 public class AuthApiController : ControllerBase
 {
     private readonly OtpDeliveryService _otpDelivery;
+    private readonly ILogger<AuthApiController> _logger;
 
-    public AuthApiController(OtpDeliveryService otpDelivery)
+    public AuthApiController(OtpDeliveryService otpDelivery, ILogger<AuthApiController> logger)
     {
         _otpDelivery = otpDelivery;
+        _logger = logger;
     }
 
-    [HttpPost("second-login/send-otp")]
+    [HttpPost("send-login-otp")]
     public async Task<ActionResult<ApiResult<object>>> SendOtp([FromBody] CitizenSendOtpRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.PhoneNumber) || string.IsNullOrWhiteSpace(request.MelliCode))
@@ -31,6 +34,10 @@ public class AuthApiController : ControllerBase
                 Message = "شماره تلفن و کد ملی الزامی است"
             });
         }
+
+        _logger.LogInformation(
+            "Citizen send-login-otp from {RemoteIp}",
+            HttpContext.Connection.RemoteIpAddress);
 
         var (ok, error) = await _otpDelivery.SendOtpWithSmsAsync(
             request.PhoneNumber.Trim(),

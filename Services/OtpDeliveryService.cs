@@ -56,7 +56,6 @@ public class OtpDeliveryService
             var (ok, otpCode, error) = await _authApiClient.SendOtpAsync(phoneNumber, melliCode);
             if (!ok)
             {
-                _cache.Remove(cacheKey);
                 return (false, error);
             }
 
@@ -65,7 +64,6 @@ public class OtpDeliveryService
                 _logger.LogError(
                     "OTP code missing after send-otp for phone ending {Suffix}",
                     SafeSuffix(phoneNumber));
-                _cache.Remove(cacheKey);
                 return (false, "کد تایید دریافت نشد");
             }
 

@@ -243,20 +243,30 @@ public class AuthApiClient
             {
                 PhoneNumber = phoneNumber,
                 MelliCode = melliCode,
-                OtpCode = otpCode,
-                SmsBody = BuildLoginSmsBody(otpCode)
+                OtpCode = otpCode
+                // SMS is sent only by this portal (SmsService), not via login API body.
             };
 
-            _logger.LogInformation("Sending OTP for phone ending {Suffix}", SafeSuffix(phoneNumber));
+            _logger.LogInformation(
+                "Registering OTP with login API for phone ending {Suffix}",
+                SafeSuffix(phoneNumber));
 
             var response = await _httpClient.PostAsJsonAsync("/api/auth/second-login/send-otp", request);
             var raw = await response.Content.ReadAsStringAsync();
             var result = TryDeserialize<ApiResult<JsonElement>>(raw);
 
-            if (!response.IsSuccessStatusCode || (result != null && result.Success == false))
+            if (!response.IsSuccessStatusCode)
             {
-                _logger.LogError("Send OTP failed: {Status} - {Message}", response.StatusCode, result?.Message);
+                _logger.LogError("Send OTP failed: {Status} - {Body}", response.StatusCode, raw);
                 return (false, null, result?.Message ?? "ارسال کد تایید ناموفق بود");
+            }
+
+            if (result == null || !result.Success)
+            {
+                _logger.LogError(
+                    "Send OTP invalid JSON or success=false: {Body}",
+                    raw.Length > 500 ? raw[..500] : raw);
+                return (false, null, result?.Message ?? "پاسخ نامعتبر از سرویس احراز هویت");
             }
 
             var resolvedOtp = TryExtractOtpCode(raw) ?? otpCode;
