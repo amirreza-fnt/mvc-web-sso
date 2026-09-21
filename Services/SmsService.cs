@@ -5,8 +5,11 @@ namespace SSOLoginService.Web.Services;
 
 public class SmsService
 {
-    private const string DefaultSendUrl =
-        "http://erp.sabzevar.ir/SubSystems/SMS/webservices/sms_send.aspx";
+    private const string SmsPath = "/SubSystems/SMS/webservices/sms_send.aspx";
+
+    private const string DefaultInternalSendUrl = "http://192.168.1.30" + SmsPath;
+
+    private const string DefaultPublicSendUrl = "http://erp.sabzevar.ir" + SmsPath;
 
     private const string FooterLine = "مدیریت فناوری اطلاعات شهرداری سبزوار";
 
@@ -30,7 +33,6 @@ public class SmsService
             return (false, "تنظیمات پیامک ناقص است");
         }
 
-        var sendUrl = _configuration["Sms:SendUrl"] ?? DefaultSendUrl;
         var num = NormalizePhone(phoneNumber);
         if (string.IsNullOrWhiteSpace(num) || num.Length < 10)
         {
@@ -40,18 +42,60 @@ public class SmsService
 
         var footer = _configuration["Sms:FooterLine"] ?? FooterLine;
         var body = AuthApiClient.BuildLoginSmsBody(otpCode, footer);
+        var hostHeader = _configuration["Sms:HostHeader"];
 
-        var url = BuildSendUrl(sendUrl, token, num, body);
         _logger.LogInformation("Sending login OTP SMS to phone ending {Suffix}", SafeSuffix(num));
 
-        return await SendGatewayRequestAsync(url);
+        string? lastError = null;
+        foreach (var sendUrl in GetSendUrls())
+        {
+            var url = BuildSendUrl(sendUrl, token, num, body);
+            _logger.LogInformation("Trying SMS gateway {Gateway}", sendUrl);
+
+            var (ok, error) = await SendGatewayRequestAsync(url, hostHeader);
+            if (ok)
+                return (true, null);
+
+            lastError = error;
+            _logger.LogWarning("SMS gateway failed for {Gateway}: {Error}", sendUrl, error);
+        }
+
+        return (false, lastError ?? "ارسال پیامک ناموفق بود");
     }
 
-    private async Task<(bool Ok, string? Error)> SendGatewayRequestAsync(Uri url)
+    private IEnumerable<string> GetSendUrls()
+    {
+        var configured = _configuration.GetSection("Sms:SendUrls").Get<string[]>();
+        if (configured is { Length: > 0 })
+        {
+            foreach (var url in configured.Where(u => !string.IsNullOrWhiteSpace(u)))
+                yield return url.Trim();
+            yield break;
+        }
+
+        var primary = _configuration["Sms:SendUrl"];
+        if (string.IsNullOrWhiteSpace(primary))
+            primary = DefaultInternalSendUrl;
+
+        yield return primary.Trim();
+
+        var fallback = _configuration["Sms:FallbackSendUrl"];
+        if (string.IsNullOrWhiteSpace(fallback))
+            fallback = DefaultPublicSendUrl;
+
+        fallback = fallback.Trim();
+        if (!string.Equals(primary, fallback, StringComparison.OrdinalIgnoreCase))
+            yield return fallback;
+    }
+
+    private async Task<(bool Ok, string? Error)> SendGatewayRequestAsync(Uri url, string? hostHeader)
     {
         try
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            if (!string.IsNullOrWhiteSpace(hostHeader))
+                request.Headers.Host = hostHeader;
+
             using var response = await _httpClient.SendAsync(
                 request,
                 HttpCompletionOption.ResponseHeadersRead);
@@ -87,13 +131,13 @@ public class SmsService
         }
         catch (TaskCanceledException ex)
         {
-            _logger.LogError(ex, "SMS gateway request timed out (server may not reach erp.sabzevar.ir:80)");
-            return (false, "ارسال پیامک ناموفق بود: سرور به erp.sabzevar.ir دسترسی شبکه ندارد");
+            _logger.LogError(ex, "SMS gateway request timed out for {Url}", url.GetLeftPart(UriPartial.Path));
+            return (false, "تایم‌اوت اتصال به سرویس پیامک");
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Exception while sending SMS: {Message}", ex.Message);
-            return (false, "خطا در ارسال پیامک");
+            return (false, "خطا در اتصال به سرویس پیامک");
         }
     }
 

@@ -14,7 +14,7 @@ builder.Services.AddHttpClient<AuthApiClient>(client =>
 
 builder.Services.AddHttpClient<SmsService>(client =>
 {
-    client.Timeout = TimeSpan.FromSeconds(15);
+    client.Timeout = TimeSpan.FromSeconds(10);
     client.DefaultRequestVersion = HttpVersion.Version11;
     client.DefaultVersionPolicy = HttpVersionPolicy.RequestVersionOrLower;
     client.DefaultRequestHeaders.UserAgent.ParseAdd(
