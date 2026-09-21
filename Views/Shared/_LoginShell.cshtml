@@ -1,6 +1,20 @@
+@inject IWebHostEnvironment Env
 @{
     Layout = "_Layout";
     var legal = ViewData["Legal"] as string;
+
+    var slideshowDir = System.IO.Path.Combine(Env.WebRootPath, "images", "slideshow");
+    var allowed = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".jpg", ".jpeg", ".png", ".webp" };
+    var slides = System.IO.Directory.Exists(slideshowDir)
+        ? System.IO.Directory.GetFiles(slideshowDir)
+            .Where(file => allowed.Contains(System.IO.Path.GetExtension(file)))
+            .OrderBy(file => System.IO.Path.GetFileName(file), StringComparer.OrdinalIgnoreCase)
+            .Select(file => "/images/slideshow/" + System.IO.Path.GetFileName(file))
+            .ToList()
+        : new List<string>();
+
+    if (slides.Count == 0)
+        slides.Add("/images/login-right.png");
 }
 
 <main class="login-page">
@@ -14,8 +28,28 @@
     <div class="login-page-center">
         <div class="login-page-wrap">
             <section class="login-card">
-                <div class="login-card-media">
-                    <img src="/images/login-right.png" alt="مسجد جامع سبزوار، خیابان بیهق" />
+                <div class="login-card-media" data-slideshow>
+                    <div class="login-slideshow">
+                        @for (var i = 0; i < slides.Count; i++)
+                        {
+                            <img class="login-slideshow-slide@(i == 0 ? " is-active" : "")"
+                                 src="@slides[i]"
+                                 alt="" />
+                        }
+                    </div>
+
+                    @if (slides.Count > 1)
+                    {
+                        <nav class="login-slideshow-nav" aria-label="اسلایدشو">
+                            @for (var i = 0; i < slides.Count; i++)
+                            {
+                                <button type="button"
+                                        class="login-slideshow-dot@(i == 0 ? " is-active" : "")"
+                                        aria-label="اسلاید @(i + 1)"
+                                        @(i == 0 ? Html.Raw("aria-current=\"true\"") : null)></button>
+                            }
+                        </nav>
+                    }
                 </div>
 
                 <div class="login-card-body">
@@ -57,5 +91,6 @@
 </main>
 
 @section Scripts {
+    <script src="/js/slideshow.js"></script>
     @await RenderSectionAsync("Scripts", required: false)
 }
