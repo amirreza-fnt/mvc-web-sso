@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 using SSOLoginService.Web.Services;
 
 namespace SSOLoginService.Web.Controllers;
@@ -404,17 +405,8 @@ public class AccountController : Controller
 
     private IActionResult CompleteLoginRedirect(string returnUrl, TokenResponse token)
     {
-        if (IsCustomSchemeReturnUrl(returnUrl))
-        {
-            var separator = returnUrl.Contains('?', StringComparison.Ordinal) ? '&' : '?';
-            var redirect = $"{returnUrl}{separator}token={Uri.EscapeDataString(token.AccessToken)}";
-            if (!string.IsNullOrWhiteSpace(token.RefreshToken))
-            {
-                redirect += $"&refreshToken={Uri.EscapeDataString(token.RefreshToken)}";
-            }
-
-            return Redirect(redirect);
-        }
+        if (IsCustomSchemeReturnUrl(returnUrl) || IsAllowedHttpsCallback(returnUrl))
+            return Redirect(BuildTokenRedirectUrl(returnUrl, token));
 
         if (returnUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
             || returnUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
@@ -424,6 +416,62 @@ public class AccountController : Controller
 
         HttpContext.Session.SetString(SessionReturnUrl, returnUrl);
         return RedirectToAction(nameof(Success));
+    }
+
+    private static string BuildTokenRedirectUrl(string returnUrl, TokenResponse token)
+    {
+        var separator = returnUrl.Contains('?', StringComparison.Ordinal) ? '&' : '?';
+        var redirect = $"{returnUrl}{separator}token={Uri.EscapeDataString(token.AccessToken)}";
+        if (!string.IsNullOrWhiteSpace(token.RefreshToken))
+            redirect += $"&refreshToken={Uri.EscapeDataString(token.RefreshToken)}";
+
+        return redirect;
+    }
+
+    private bool IsAllowedHttpsCallback(string returnUrl)
+    {
+        if (string.IsNullOrWhiteSpace(returnUrl))
+            return false;
+
+        if (!returnUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+            && !returnUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (!Uri.TryCreate(returnUrl, UriKind.Absolute, out var target))
+            return false;
+
+        var config = HttpContext.RequestServices.GetRequiredService<IConfiguration>();
+        var allowed = config.GetSection("Frontend:AllowedCallbackUrls").Get<string[]>() ?? Array.Empty<string>();
+
+        foreach (var entry in allowed)
+        {
+            if (string.IsNullOrWhiteSpace(entry))
+                continue;
+
+            if (!Uri.TryCreate(entry.Trim(), UriKind.Absolute, out var allowedUri))
+                continue;
+
+            if (CallbackUriMatches(target, allowedUri))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool CallbackUriMatches(Uri target, Uri allowed) =>
+        string.Equals(target.Scheme, allowed.Scheme, StringComparison.OrdinalIgnoreCase)
+        && string.Equals(target.Host, allowed.Host, StringComparison.OrdinalIgnoreCase)
+        && string.Equals(NormalizeCallbackPath(target.AbsolutePath), NormalizeCallbackPath(allowed.AbsolutePath), StringComparison.OrdinalIgnoreCase);
+
+    private static string NormalizeCallbackPath(string path)
+    {
+        if (string.IsNullOrEmpty(path))
+            return "/";
+
+        var trimmed = path.TrimEnd('/');
+        return trimmed.Length == 0 ? "/" : trimmed;
     }
 
     private static bool IsCustomSchemeReturnUrl(string? returnUrl) =>
