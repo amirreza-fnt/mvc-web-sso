@@ -5,6 +5,7 @@ using SSOLoginService.Web.Services;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllersWithViews();
+builder.Services.AddMemoryCache();
 builder.Services.AddScoped<OtpDeliveryService>();
 
 var corsOrigins = builder.Configuration.GetSection("Cors:Origins").Get<string[]>()
