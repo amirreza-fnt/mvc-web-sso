@@ -36,13 +36,16 @@
     <button type="submit" class="btn btn-primary">ارسال کد تایید</button>
 </form>
 
-<div class="divider">یا</div>
+@if (ViewBag.ShowMoiLogin as bool? == true)
+{
+    <div class="divider">یا</div>
 
-<a class="sso-btn"
-   href="@Url.Action("redirect", "Account", new { provider = "moi", returnUrl = ViewBag.ReturnUrl })">
-    <span class="sso-btn-label">
-        <img src="/images/ir.png" alt="" />
-        ورود از طریق پنجره دولت من
-    </span>
-    <span class="sso-btn-chevron">‹</span>
-</a>
+    <a class="sso-btn"
+       href="@Url.Action("redirect", "Account", new { provider = "moi", returnUrl = ViewBag.ReturnUrl })">
+        <span class="sso-btn-label">
+            <img src="/images/ir.png" alt="" />
+            ورود از طریق پنجره دولت من
+        </span>
+        <span class="sso-btn-chevron">‹</span>
+    </a>
+}

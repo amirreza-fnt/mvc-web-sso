@@ -66,6 +66,7 @@ public class AccountController : Controller
         if (phones == null || phones.Count == 0)
         {
             ViewBag.Error = error ?? "ورود با کد ملی ناموفق بود";
+            ViewBag.ShowMoiLogin = true;
             return View("Login");
         }
 
