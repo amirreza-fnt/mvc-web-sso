@@ -74,7 +74,9 @@ if (!app.Environment.IsDevelopment())
     app.UseHsts();
 }
 
-app.UseHttpsRedirection();
+app.UseWhen(
+    ctx => !ctx.Request.Path.StartsWithSegments("/api"),
+    branch => branch.UseHttpsRedirection());
 app.UseStaticFiles();
 app.UseRouting();
 app.UseCors("CitizenApps");
