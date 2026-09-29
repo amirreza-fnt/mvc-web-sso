@@ -19,15 +19,18 @@ public class AccountController : Controller
 
     private readonly AuthApiClient _authApiClient;
     private readonly OtpDeliveryService _otpDelivery;
+    private readonly ClientAccessService _clientAccess;
     private readonly ILogger<AccountController> _logger;
 
     public AccountController(
         AuthApiClient authApiClient,
         OtpDeliveryService otpDelivery,
+        ClientAccessService clientAccess,
         ILogger<AccountController> logger)
     {
         _authApiClient = authApiClient;
         _otpDelivery = otpDelivery;
+        _clientAccess = clientAccess;
         _logger = logger;
     }
 
@@ -441,6 +444,9 @@ public class AccountController : Controller
 
         if (!Uri.TryCreate(returnUrl, UriKind.Absolute, out var target))
             return false;
+
+        if (_clientAccess.IsCallbackAllowed(target))
+            return true;
 
         var config = HttpContext.RequestServices.GetRequiredService<IConfiguration>();
         var allowed = config.GetSection("Frontend:AllowedCallbackUrls").Get<string[]>() ?? Array.Empty<string>();

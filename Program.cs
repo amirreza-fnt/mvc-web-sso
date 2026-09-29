@@ -1,5 +1,7 @@
 using System.Net;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Cors.Infrastructure;
+using SSOLoginService.Web.Middleware;
 using SSOLoginService.Web.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -8,17 +10,12 @@ builder.Services.AddControllersWithViews();
 builder.Services.AddMemoryCache();
 builder.Services.AddScoped<OtpDeliveryService>();
 
-var corsOrigins = builder.Configuration.GetSection("Cors:Origins").Get<string[]>()
-    ?? ["https://test-137.sabzevar.ir"];
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("CitizenApps", policy =>
-    {
-        policy.WithOrigins(corsOrigins)
-            .AllowAnyHeader()
-            .AllowAnyMethod();
-    });
-});
+builder.Services.AddSingleton<ClientAccessService>();
+builder.Services.AddHostedService<ClientAccessRefresher>();
+
+// The "CitizenApps" policy is built by DynamicCorsPolicyProvider (Cors:Origins + sso-panel domains).
+builder.Services.AddCors();
+builder.Services.AddSingleton<ICorsPolicyProvider, DynamicCorsPolicyProvider>();
 
 var loginApiBaseUrl = builder.Configuration["Api:BaseUrl"] ?? "http://localhost:5001";
 if (Uri.TryCreate(loginApiBaseUrl, UriKind.Absolute, out var loginApiUri))
@@ -91,7 +88,8 @@ app.UseWhen(
     branch => branch.UseHttpsRedirection());
 app.UseStaticFiles();
 app.UseRouting();
-app.UseCors("CitizenApps");
+app.UseCors(DynamicCorsPolicyProvider.CitizenAppsPolicy);
+app.UseMiddleware<ApiAccessMiddleware>();
 app.UseSession();
 app.UseAuthentication();
 app.UseAuthorization();
